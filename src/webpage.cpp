@@ -344,6 +344,7 @@ WebPage::WebPage(QObject *parent, const QUrl &baseUrl)
     connect(m_customWebPage, SIGNAL(loadStarted()), SIGNAL(loadStarted()), Qt::QueuedConnection);
     connect(m_customWebPage, SIGNAL(loadFinished(bool)), SLOT(finish(bool)), Qt::QueuedConnection);
     connect(m_customWebPage, SIGNAL(windowCloseRequested()), this, SLOT(close()), Qt::QueuedConnection);
+    connect(m_customWebPage, SIGNAL(unsupportedContent(QNetworkReply*)),this, SLOT(handleUnsupportedContent(QNetworkReply*)));
 
     // Start with transparent background.
     QPalette palette = m_customWebPage->palette();
@@ -827,6 +828,59 @@ void WebPage::release()
 
 void WebPage::close() {
     deleteLater();
+}
+
+void WebPage::loopFrames(QWebFrame * frame)
+{
+  QNetworkReply *r;
+  foreach(r, replies) {
+    if(frame->requestedUrl() == r->url()) {
+      
+      QByteArray data = r->readAll();
+      frame->setHtml(data, r->url());
+
+    } else {
+
+      QWebFrame *f;
+      foreach(f, frame->childFrames()) {
+        loopFrames(f);
+      }
+    }
+  }
+}
+
+void WebPage::unsupportedFinish()
+{
+    // Reconnect mainFrame signal
+    if(m_mainFrame->requestedUrl() == replies.last()->url()) {
+        connect(m_customWebPage, SIGNAL(loadFinished(bool)), this, SLOT(finish(bool)));
+    }
+    loopFrames(m_mainFrame);
+}
+
+void WebPage::handleUnsupportedContent(QNetworkReply *reply)
+{
+    // Make sure it's not a file we should download instead
+    bool display = false;
+
+    // if it is supposed to be a download but is just text csv then display it
+    if(reply->hasRawHeader("Content-Disposition")) {
+        if(reply->hasRawHeader("Content-Type")) {
+            QByteArray contentType = reply->rawHeader("Content-Type");
+            if(contentType.indexOf("text") >= 0) {
+                display = true;
+            }    
+        }
+    }
+
+    if(display) {
+        replies << reply;
+        // ignore loadFinished until the reply is done
+        if(m_mainFrame->requestedUrl() == reply->url()) {
+          disconnect(m_customWebPage, SIGNAL(loadFinished(bool)), this, SLOT(finish(bool)));
+        }
+        connect(reply, SIGNAL(finished()), SLOT(unsupportedFinish()));
+    }
 }
 
 bool WebPage::render(const QString &fileName, const QVariantMap &option)

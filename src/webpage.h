@@ -35,6 +35,7 @@
 #include <QVariantMap>
 #include <QWebPage>
 #include <QWebFrame>
+#include <QNetworkReply>
 
 class Config;
 class CustomPage;
@@ -472,6 +473,9 @@ signals:
 private slots:
     void finish(bool ok);
     void setupFrame(QWebFrame *frame = NULL);
+    void unsupportedFinish();
+protected slots:
+    void handleUnsupportedContent(QNetworkReply *reply); 
 
 private:
     QImage renderImage();
@@ -490,6 +494,7 @@ private:
     QString filePicker(const QString &oldFile);
     bool javaScriptConfirm(const QString &msg);
     bool javaScriptPrompt(const QString &msg, const QString &defaultValue, QString *result);
+    void loopFrames(QWebFrame * frame);
 
 private:
     CustomPage *m_customWebPage;
@@ -505,6 +510,7 @@ private:
     bool m_navigationLocked;
     QPoint m_mousePos;
     bool m_ownsPages;
+    QList<QNetworkReply*> replies;
 
     friend class Phantom;
     friend class CustomPage;
